@@ -27,7 +27,7 @@ var columnasDatosServicios = [
     "Descripción",
     "Unidad de medida",
     "Unidad de medida comercial",
-    "Tipo artículo / servicio",
+    "Tipo artículo/servicio",
     "Precio",
     "Moneda",
     "Actividad económica",
@@ -47,8 +47,7 @@ var columnasDatosServicios = [
     "Estado"
 ];
 
-var clientes = [];
-var servicios = [];
+var db;
 
 class Cliente {
     constructor() {
@@ -234,24 +233,28 @@ function extraerDatosServicio(datosServicio, moneda, actividadEconomica, fechaCo
 ** - Devuelve nulo: si el cliente pasado por parámetro no contiene tipo y/o número de ID.
 ** - Devuelve -1: si no se encuentra el cliente en el arreglo de servicios.
 */ 
-function indiceClienteExistente(datosCliente) {
-    let tipoId = datosCliente?.Identificacion?.Tipo;
-    let numId = datosCliente?.Identificacion?.Numero;
+function clienteExistente(datosCliente) {
+    let tipoIdCliente = datosCliente?.Identificacion?.Tipo;
+    let numIdCliente = datosCliente?.Identificacion?.Numero;
 
-    if(tipoId != undefined && numId != undefined)
+    if(tipoIdCliente != undefined && numIdCliente != undefined)
     {
-        for(let i=0; i<clientes.length; i++) {
-            if(clientes[i].tipoId == tipoId && clientes[i].numId == numId) {
-                return i;
+        db.clientes.where("tipoId").equals(tipoIdCliente).and(item => item.numId == numIdCliente).toArray()
+        .then((resultadosClientes) => {
+            console.log(resultadosClientes);
+            if(resultadosClientes?.length == 1) {
+                console.log(resultadosClientes[0]);
+                return resultadosClientes[0];
             }
-        }
+            else {
+                return -1;
+            }
+        });
     }
     else
     {
         return null;
     }
-
-    return -1;
 }
 
 /* ---------- indiceServicioExistente ----------
@@ -288,9 +291,8 @@ function indiceServicioExistente(datosServicio) {
 /* ---------- actualizarDatosCliente ----------
 ** Extrae los datos del cliente actual y modifica el cliente existente con los datos actualizados.
 */ 
-function actualizarDatosCliente(indiceCliente, datosCliente, fechaComprobante) {
+function actualizarDatosCliente(clienteExistente, datosCliente, fechaComprobante) {
     let clienteActual = extraerDatosCliente(datosCliente, fechaComprobante);
-    let clienteExistente = clientes[indiceCliente];
 
     // Recorre todas las propiedades del objeto cliente para incluir
     // cualquier información existente en el cliente actualizado.
@@ -300,7 +302,7 @@ function actualizarDatosCliente(indiceCliente, datosCliente, fechaComprobante) {
         }
     }
 
-    clientes.splice(indiceCliente, 1, clienteActual);
+    db.clientes.update(clienteExistente.ID, clienteActual);
 }
 
 /* ---------- actualizarDatosServicio ----------
@@ -326,7 +328,7 @@ function actualizarDatosServicio(indiceServicio, datosServicio, moneda, activida
 */ 
 function agregarCliente(datosCliente, fechaComprobante) {
     let clienteNuevo = extraerDatosCliente(datosCliente, fechaComprobante);
-    clientes.push(clienteNuevo);
+    db.clientes.put(clienteNuevo);
 }
 
 /* ---------- agregarServicio ----------
@@ -334,7 +336,7 @@ function agregarCliente(datosCliente, fechaComprobante) {
 */ 
 function agregarServicio(datosServicio, moneda, actividadEconomica, fechaComprobante) {
     let servicioNuevo = extraerDatosServicio(datosServicio, moneda, actividadEconomica, fechaComprobante);
-    servicios.push(servicioNuevo);
+    db.servicios.put(servicioNuevo);
 }
 
 /* ---------- procesarCliente ----------
@@ -343,23 +345,26 @@ function agregarServicio(datosServicio, moneda, actividadEconomica, fechaComprob
 */ 
 function procesarCliente(datosCliente, fechaComprobante) {
 
-    if(clientes.length == 0) {
-        agregarCliente(datosCliente, fechaComprobante);
-    }
-    else {
-        let indiceCliente = indiceClienteExistente(datosCliente);
-        if(indiceCliente == null) {
-            return;
-        }
-        else if(indiceCliente == -1) {
+    db.clientes.count().then((numClientes) => {
+        if(numClientes == 0) {
             agregarCliente(datosCliente, fechaComprobante);
         }
         else {
-            if(clientes[indiceCliente].fechaUltimaActualizacion < fechaComprobante) {
-                actualizarDatosCliente(indiceCliente, datosCliente, fechaComprobante);
+            let cliente = clienteExistente(datosCliente);
+            if(cliente == null) {
+                return;
             }
+            else if(cliente == -1) {
+                agregarCliente(datosCliente, fechaComprobante);
+            }
+            // else {
+            //     if(cliente.fechaUltimaActualizacion < fechaComprobante) {
+            //         actualizarDatosCliente(clienteExistente, datosCliente, fechaComprobante);
+            //     }
+            // }
         }
-    }
+    });
+    
 }
 
 /* ---------- procesarServicio ----------
@@ -368,23 +373,24 @@ function procesarCliente(datosCliente, fechaComprobante) {
 */ 
 function procesarServicio(datosServicio, moneda, actividadEconomica, fechaComprobante) {
 
-    if(servicios.length == 0) {
-        agregarServicio(datosServicio, moneda, actividadEconomica, fechaComprobante);
-    }
-    else {
-        let indiceServicio = indiceServicioExistente(datosServicio);
-        if(indiceServicio == null) {
-            return;
-        }
-        else if(indiceServicio == -1) {
-            agregarServicio(datosServicio, moneda, actividadEconomica, fechaComprobante);
-        }
-        else {
-            if(servicios[indiceServicio].fechaUltimaActualizacion < fechaComprobante) {
-                actualizarDatosServicio(indiceServicio, datosServicio, moneda, actividadEconomica, fechaComprobante);
-            }
-        }
-    }
+    agregarServicio(datosServicio, moneda, actividadEconomica, fechaComprobante);
+    // if(servicios.length == 0) {
+    //     agregarServicio(datosServicio, moneda, actividadEconomica, fechaComprobante);
+    // }
+    // else {
+    //     let indiceServicio = indiceServicioExistente(datosServicio);
+    //     if(indiceServicio == null) {
+    //         return;
+    //     }
+    //     else if(indiceServicio == -1) {
+    //         agregarServicio(datosServicio, moneda, actividadEconomica, fechaComprobante);
+    //     }
+    //     else {
+    //         if(servicios[indiceServicio].fechaUltimaActualizacion < fechaComprobante) {
+    //             actualizarDatosServicio(indiceServicio, datosServicio, moneda, actividadEconomica, fechaComprobante);
+    //         }
+    //     }
+    // }
 }
 
 /* ---------- procesarTodosServicios ----------
@@ -413,7 +419,7 @@ function procesarTodosServicios(jsonDoc, tipoComprobante) {
 ** Revisa el tipo de comprobante y llama los métodos procesarCliente y procesarTodosServicios,
 ** que se encargan de procesar los datos del cliente y los servicios en el comprobante, respectivamente.
 */ 
-function procesarArchivo(jsonDoc) { 
+function procesarArchivo(jsonDoc) {
     let comprobanteEsFactura = jsonDoc.FacturaElectronica ? true : false;
     let comprobanteEsTiquete = jsonDoc.TiqueteElectronico ? true : false;
     let tipoComprobante;
@@ -480,11 +486,33 @@ function procesarTodosArchivos() {
         }
         fr.readAsText(fileInput.files[i]);
     }
+}
+
+function cerrar() {
 
 }
 
 fileInput.addEventListener('change', () => {
-    procesarTodosArchivos();
+
+    let crearDB = function(){
+        db = new Dexie("ImportacionDatos");
+        db.version(1).stores({
+            clientes: "++ID, nombre, tipoId, numId, codigoPais1, telefono1, codigoPais2, telefono2, correo, provincia, canton, distrito, barrio, OtrasSenas, fechaUltimaActualizacion",
+            servicios: "++ID, codigo01, codigo02, codigo03, codigo04, codigo99, nombre, descripcion, unidadMedida, tipoServicio, precio, moneda, actividadEconomica, gravamen, impuesto01, impuesto02, impuesto03, impuesto04, impuesto05, impuesto06, impuesto07BI, impuesto07IVA, impuesto08, impuesto12, impuesto99, codigoCabys, estado, fechaUltimaActualizacion"
+        });
+
+        return db.open();
+    };
+
+    crearDB()
+    .then(() => {
+        procesarTodosArchivos();
+    })
+    .finally(() => {
+        //db.close();
+        //db.delete();
+    });
+
 });
 
 
